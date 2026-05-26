@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "legal-agent"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic-ai",
+    "pydantic>=2.7",
+    "openai",
+    "arize-phoenix-otel",
+    "opentelemetry-sdk",
+    # Pinned: datasets>=2.15 removed script-based dataset loader support and
+    # trust_remote_code. theatticusproject/cuad-qa requires the legacy cuad-qa.py
+    # loader. Revisit when dataset migrates to Parquet format.
+    "datasets==2.14.6",
+    "python-dotenv",
+    # FastAPI: core web framework for the /extract microservice endpoints
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "deepeval",
+    "pytest",
+    "pytest-asyncio",
+    "mypy",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+strict = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+markers = [
+    "llm: marks tests requiring a live LLM call and OPENAI_API_KEY",
+    "integration: marks end-to-end tests requiring all services running",
+]

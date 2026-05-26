@@ -1,0 +1,38 @@
+﻿# Environment secrets — never commit
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Type checking and linting caches
+.mypy_cache/
+.ruff_cache/
+
+# Test and coverage
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Runtime data — regenerate with scripts/prepare_cuad_data.py
+data/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# DeepEval local cache and telemetry
+.deepeval/

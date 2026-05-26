@@ -12,6 +12,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Histogram,
+    generate_latest,
+)
 
 from legal_agent.agent.runner import run_extraction
 from legal_agent.api.models import BatchExtractionRequest, ExtractionRequest, HealthResponse
@@ -19,6 +25,23 @@ from legal_agent.observability.tracing import configure_tracing
 from legal_agent.schemas.legal import ExtractionResult
 
 _logger = logging.getLogger(__name__)
+
+REQUEST_COUNTER: Counter = Counter(
+    "legal_agent_requests_total",
+    "Total extraction requests received",
+    ["endpoint", "status"],
+)
+ERROR_COUNTER: Counter = Counter(
+    "legal_agent_errors_total",
+    "Total extraction errors",
+    ["endpoint", "error_type"],
+)
+PROCESSING_TIME: Histogram = Histogram(
+    "legal_agent_processing_time_seconds",
+    "Extraction processing time in seconds",
+    ["endpoint"],
+    buckets=[0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
+)
 
 
 def _check_phoenix_connection() -> bool:
@@ -86,9 +109,23 @@ async def extract(request: ExtractionRequest) -> ExtractionResult:
         ExtractionResult with validated schema, risk flags, and confidence score.
     """
     try:
-        return await run_extraction(request.contract_text)
+        with PROCESSING_TIME.labels(endpoint="/extract").time():
+            result = await run_extraction(request.contract_text)
+        REQUEST_COUNTER.labels(endpoint="/extract", status="success").inc()
+        return result
     except Exception as exc:
+        ERROR_COUNTER.labels(endpoint="/extract", error_type=type(exc).__name__).inc()
+        REQUEST_COUNTER.labels(endpoint="/extract", status="error").inc()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/metrics")
+async def metrics() -> Response:
+    """Prometheus metrics endpoint — scraped by monitoring stack."""
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST,
+    )
 
 
 @app.post("/extract/batch", response_model=list[ExtractionResult])

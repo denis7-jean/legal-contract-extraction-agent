@@ -5,6 +5,17 @@ Name: Legal & Compliance Document Extraction Agent
 Purpose: An agentic LLMOps pipeline that extracts structured legal entities and clauses from unstructured contract text into a strict Pydantic JSON schema, evaluated against the CUAD dataset.
 Status: Active development. Domain pivoted from PC Config Agent. All PC-related code is obsolete — do not reference or regenerate it.
 
+## Sprint map
+Sprint 1 ✅  CUAD ETL pipeline (scripts/prepare_cuad_data.py → data/eval_dataset.json)
+Sprint 2 ✅  Core implementation — schemas, services, PydanticAI agent, FastAPI API
+Sprint 3 ✅  DeepEval hallucination / relevance / faithfulness test suite
+Sprint 4 🔄  Arize Phoenix end-to-end instrumentation (IN PROGRESS)
+             - Live Phoenix instance at localhost:6006
+             - @trace_tool and agent_request_span already in tracing.py
+             - Every tool call must emit an OTLP span
+             - FastAPI /metrics endpoint (Prometheus-compatible counters)
+             - Phoenix connection verified via GET /health response
+
 ## Repository layout
 src/legal_agent/    # Importable package name: legal_agent  (installed via pip install -e ".")
   schemas/          # Pydantic models only — no logic
@@ -76,6 +87,37 @@ Lint:              ruff check src/ evaluation/ scripts/
 Run ETL:           python scripts/prepare_cuad_data.py
 Start Phoenix:     python -m phoenix.server.main serve
 
+## Sprint 4 — Observability contract
+These rules apply to all Sprint 4 files. Deviation is a bug.
+
+- Phoenix runs locally via: python -m phoenix.server.main serve
+  It exposes the OTLP collector at localhost:6006/v1/traces
+  and the UI at localhost:6006. Both must be reachable before
+  running integration tests.
+
+- configure_tracing() in tracing.py is already implemented and
+  idempotent. Do not rewrite it. Do not add a second TracerProvider.
+
+- @trace_tool is already implemented in tracing.py. Apply it to
+  every tool in agent/tools.py if not already applied.
+
+- Every span must record these minimum attributes:
+    tool.name, tool.input (truncated 500 chars), tool.output
+    (truncated 500 chars), agent.config_id, agent.prompt_length
+
+- The FastAPI /metrics endpoint must return Prometheus text format
+  (content-type: text/plain; version=0.0.4) with these counters:
+    legal_agent_requests_total
+    legal_agent_errors_total
+    legal_agent_processing_time_seconds (histogram)
+  Use the prometheus_client library. Add it to pyproject.toml deps.
+
+- test_api_integration.py uses FastAPI TestClient only — no live
+  Phoenix required, no LLM calls. Mark with @pytest.mark.integration.
+
+- test_observability.py verifies span emission using an in-memory
+  SpanExporter — no live Phoenix required for unit testing.
+
 ## What claude-code should never do
 - Generate any PC hardware, GPU, CPU, or motherboard related code. That domain is abandoned.
 - Use Optional[X] — use X | None instead (Python 3.10+ union syntax).
@@ -84,3 +126,9 @@ Start Phoenix:     python -m phoenix.server.main serve
 - Add print statements in src/ — use Python's logging module with a named logger.
 - Invent CUAD question strings from memory — always refer to the nine listed above.
 - Commit anything under data/ — that directory is gitignored and runtime-only.
+- Call configure_tracing() more than once per process — the guard
+  flag _tracing_configured handles idempotency already.
+- Create a second TracerProvider or a second BatchSpanProcessor —
+  one of each is registered at startup, never duplicated.
+- Use print() for span debug output — use the named logger
+  from Python logging module only.

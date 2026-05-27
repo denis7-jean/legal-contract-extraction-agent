@@ -176,7 +176,7 @@ def test_cuad_no_hallucination_governing_law(
             continue
 
     # Print summary for visibility in pytest -v output.
-    print(f"\nCUAD governing_law hallucination check:")
+    print("\nCUAD governing_law hallucination check:")
     print(f"  Passed : {len(passed)} records")
     print(f"  Skipped: {len(skipped)} records")
     for msg in skipped:

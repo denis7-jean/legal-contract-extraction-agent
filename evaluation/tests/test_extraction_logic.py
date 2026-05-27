@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from legal_agent.schemas.legal import ExtractionResult, LegalContract, Party, RiskFlag, RiskLevel
+from legal_agent.schemas.legal import ExtractionResult, LegalContract, Party, RiskLevel
 from legal_agent.services.validators import (
     check_required_fields,
     compute_overall_risk,

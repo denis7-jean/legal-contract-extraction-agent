@@ -1,0 +1,17 @@
+.env
+.deepeval/
+data/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+dist/
+build/
+.git/
+evaluation/
+scripts/
+n8n/
+*.egg-info/

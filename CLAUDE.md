@@ -11,11 +11,14 @@ Sprint 2 ✅  Core implementation — schemas, services, PydanticAI agent, FastA
 Sprint 3 ✅  DeepEval hallucination / relevance / faithfulness test suite
 Sprint 4 ✅  Arize Phoenix observability + Prometheus metrics (COMPLETE)
              - mypy clean, 24 not-llm passed, 14 integration passed
-Sprint 5 🔄  n8n workflow + end-to-end integration test (IN PROGRESS)
-             - n8n contract_extraction_workflow.json
-             - Webhook trigger → FastAPI /extract → risk routing
-             - Slack escalation on HIGH risk, DB persist on CLEAN
-             - test_e2e_integration.py with FastAPI TestClient
+Sprint 5 ✅  n8n workflow + e2e tests + CI hardening (COMPLETE)
+             - 23 integration passed, 33 not-llm passed
+             - 9-node n8n pipeline, 5-job CI gate sequence
+Sprint 6 ✅  Deployment hardening (COMPLETE)
+             - Dockerfile multi-stage build, non-root user
+             - docker-compose.yml: legal-agent + Phoenix + n8n
+             - README.md full production documentation
+             - Project complete ✅
 
 ## Repository layout
 src/legal_agent/    # Importable package name: legal_agent  (installed via pip install -e ".")

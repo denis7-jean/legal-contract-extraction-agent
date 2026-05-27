@@ -1,0 +1,67 @@
+version: "3.9"
+
+services:
+
+  legal-agent:
+    build:
+      context: .
+      target: runtime
+    container_name: legal-agent-api
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces
+      - PHOENIX_API_KEY=${PHOENIX_API_KEY}
+    depends_on:
+      phoenix:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+        "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: legal-agent-phoenix
+    ports:
+      - "6006:6006"
+    volumes:
+      - phoenix_data:/root/.phoenix
+    environment:
+      - PHOENIX_WORKING_DIR=/root/.phoenix
+    healthcheck:
+      test: ["CMD", "python", "-c",
+        "import urllib.request; urllib.request.urlopen('http://localhost:6006')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: legal-agent-n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:-changeme}
+      - LEGAL_AGENT_API_URL=http://legal-agent:8000
+      - WEBHOOK_URL=http://localhost:5678
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n:/home/node/.n8n/workflows:ro
+    depends_on:
+      legal-agent:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  phoenix_data:
+  n8n_data:

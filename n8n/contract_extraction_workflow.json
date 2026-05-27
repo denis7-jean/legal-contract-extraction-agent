@@ -1,0 +1,196 @@
+{
+  "id": "legal-contract-extraction-v1",
+  "name": "Legal Contract Extraction Pipeline",
+  "active": false,
+  "tags": ["legal", "extraction", "llmops"],
+  "nodes": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-ab12-cd3456789001",
+      "name": "Contract Upload Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "contract-upload",
+        "responseMode": "responseNode",
+        "responseData": "allEntries"
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-7890-ab12-cd3456789002",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nif (!body.contract_text || body.contract_text.length < 100) {\n  throw new Error('contract_text missing or too short');\n}\nreturn [{ json: { contract_text: body.contract_text, received_at: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-7890-ab12-cd3456789003",
+      "name": "Extract Legal Entities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LEGAL_AGENT_API_URL }}/extract",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "contract_text", "value": "={{ $json.contract_text }}" }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-7890-ab12-cd3456789004",
+      "name": "Parse Risk Level",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nreturn [{ json: {\n  overall_risk_level: data.overall_risk_level,\n  is_successful: data.is_successful,\n  risk_flags_count: data.risk_flags.length,\n  governing_law: data.contract.governing_law,\n  parties: data.contract.parties.map(p => p.name).join(', '),\n  effective_date: data.contract.effective_date,\n  document_name: data.contract.document_name,\n  confidence_score: data.confidence_score,\n  full_result: data\n} }];"
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-7890-ab12-cd3456789005",
+      "name": "Risk Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [880, 300],
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.overall_risk_level }}",
+        "rules": {
+          "rules": [
+            { "value2": "high", "operation": "equal" },
+            { "value2": "medium", "operation": "equal" },
+            { "value2": "low", "operation": "equal" }
+          ]
+        },
+        "fallbackOutput": "none"
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-7890-ab12-cd3456789006",
+      "name": "Slack Escalation Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 100],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ text: '🚨 HIGH RISK CONTRACT DETECTED', blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '*Document:* ' + ($json.document_name || '') + '\\n*Parties:* ' + ($json.parties || '') + '\\n*Risk Flags:* ' + ($json.risk_flags_count || 0) + '\\n*Governing Law:* ' + ($json.governing_law || '') + '\\n*Confidence:* ' + ($json.confidence_score || 0) } }] }) }}"
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-7890-ab12-cd3456789007",
+      "name": "Log Medium Risk",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconsole.log('MEDIUM RISK CONTRACT:', JSON.stringify({\n  document_name: data.document_name,\n  parties: data.parties,\n  risk_flags_count: data.risk_flags_count,\n  confidence_score: data.confidence_score\n}));\nreturn [{ json: { ...data, logged_at: new Date().toISOString(), action_taken: 'logged_for_review' } }];"
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-7890-ab12-cd3456789008",
+      "name": "Persist Extraction Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1320, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DATABASE_API_URL }}/contracts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.full_result) }}"
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-7890-ab12-cd3456789009",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, 300],
+      "parameters": {
+        "responseCode": 200,
+        "responseData": "={{ JSON.stringify({ status: 'processed', risk_level: $json.overall_risk_level, document_name: $json.document_name }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Contract Upload Trigger": {
+      "main": [
+        [{ "node": "Validate Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [{ "node": "Extract Legal Entities", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Legal Entities": {
+      "main": [
+        [{ "node": "Parse Risk Level", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Risk Level": {
+      "main": [
+        [{ "node": "Risk Router", "type": "main", "index": 0 }]
+      ]
+    },
+    "Risk Router": {
+      "main": [
+        [{ "node": "Slack Escalation Alert", "type": "main", "index": 0 }],
+        [{ "node": "Log Medium Risk", "type": "main", "index": 0 }],
+        [{ "node": "Persist Extraction Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack Escalation Alert": {
+      "main": [
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    },
+    "Log Medium Risk": {
+      "main": [
+        [{ "node": "Persist Extraction Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Persist Extraction Result": {
+      "main": [
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

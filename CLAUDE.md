@@ -9,12 +9,13 @@ Status: Active development. Domain pivoted from PC Config Agent. All PC-related 
 Sprint 1 ✅  CUAD ETL pipeline (scripts/prepare_cuad_data.py → data/eval_dataset.json)
 Sprint 2 ✅  Core implementation — schemas, services, PydanticAI agent, FastAPI API
 Sprint 3 ✅  DeepEval hallucination / relevance / faithfulness test suite
-Sprint 4 🔄  Arize Phoenix end-to-end instrumentation (IN PROGRESS)
-             - Live Phoenix instance at localhost:6006
-             - @trace_tool and agent_request_span already in tracing.py
-             - Every tool call must emit an OTLP span
-             - FastAPI /metrics endpoint (Prometheus-compatible counters)
-             - Phoenix connection verified via GET /health response
+Sprint 4 ✅  Arize Phoenix observability + Prometheus metrics (COMPLETE)
+             - mypy clean, 24 not-llm passed, 14 integration passed
+Sprint 5 🔄  n8n workflow + end-to-end integration test (IN PROGRESS)
+             - n8n contract_extraction_workflow.json
+             - Webhook trigger → FastAPI /extract → risk routing
+             - Slack escalation on HIGH risk, DB persist on CLEAN
+             - test_e2e_integration.py with FastAPI TestClient
 
 ## Repository layout
 src/legal_agent/    # Importable package name: legal_agent  (installed via pip install -e ".")

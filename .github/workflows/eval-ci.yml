@@ -1,0 +1,102 @@
+name: Eval CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check src/ evaluation/ scripts/
+      - name: Type check
+        run: mypy src/ --strict
+
+  unit-tests:
+    needs: lint-and-type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: Run unit tests
+        run: |
+          mkdir -p reports
+          pytest evaluation/tests/test_extraction_logic.py \
+                 -v \
+                 --junitxml=reports/unit-results.xml
+      - name: Upload unit test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: reports/unit-results.xml
+
+  integration-tests:
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: Run integration tests
+        run: |
+          mkdir -p reports
+          pytest evaluation/tests/test_observability.py \
+                 evaluation/tests/test_api_integration.py \
+                 evaluation/tests/test_e2e_integration.py \
+                 -v -m integration \
+                 --junitxml=reports/integration-results.xml
+      - name: Upload integration results
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: reports/integration-results.xml
+
+  eval-gate:
+    needs: [unit-tests, integration-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: Run LLM eval suite
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PHOENIX_API_KEY: ${{ secrets.PHOENIX_API_KEY }}
+          PHOENIX_COLLECTOR_ENDPOINT: ${{ secrets.PHOENIX_COLLECTOR_ENDPOINT }}
+        run: |
+          mkdir -p reports
+          pytest evaluation/ -m llm -v \
+                 --junitxml=reports/eval-results.xml
+      - name: Upload eval results
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-gate-results
+          path: reports/eval-results.xml
+
+  build-and-push:
+    needs: eval-gate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t legal-agent:${{ github.sha }} .

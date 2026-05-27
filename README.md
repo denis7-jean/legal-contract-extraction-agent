@@ -10,6 +10,54 @@ The **core AI microservice** is a FastAPI service backed by a PydanticAI agent w
 
 The **automation layer** is a 9-node n8n workflow triggered by contract uploads that calls `/extract`, routes on `overall_risk_level`, sends Slack alerts for HIGH risk contracts, and persists CLEAN contracts to a configurable persistence endpoint.
 
+```mermaid
+flowchart TD
+    subgraph L1["⬛ Layer 1 — Data & Evaluation"]
+        direction LR
+        CUAD([CUAD Dataset\nHuggingFace Hub])
+        ETL[prepare_cuad_data.py\nETL v1.4.0]
+        GD[(eval_dataset.json\n20 contracts)]
+        DE[DeepEval\nHallucination · Relevancy · Faithfulness]
+        CI[GitHub Actions\n5-job eval gate]
+        CUAD --> ETL --> GD --> DE --> CI
+    end
+
+    subgraph L2["⬛ Layer 2 — Core AI Microservice"]
+        direction LR
+        FA[FastAPI\nPOST /extract]
+        AG[PydanticAI Agent\ngpt-4o]
+        subgraph TOOLS["Tools"]
+            T1[extract_entities]
+            T2[validate_clauses]
+            T3[flag_risk]
+        end
+        ER([ExtractionResult\nstrict Pydantic schema])
+        PM[Prometheus\n/metrics]
+        PH[(Arize Phoenix\nlocalhost:6006)]
+        FA --> AG --> TOOLS --> ER
+        FA --> PM
+        TOOLS -.->|OTLP spans| PH
+    end
+
+    subgraph L3["⬛ Layer 3 — n8n Orchestration"]
+        direction LR
+        WH([Webhook\nContract Upload])
+        VA[Validate Input]
+        EX[HTTP POST /extract]
+        SW{Risk Router}
+        SL[Slack Alert\nHIGH risk 🚨]
+        LG[Log\nMEDIUM risk]
+        DB[(Persist to DB\nLOW / CLEAN ✅)]
+        WH --> VA --> EX --> SW
+        SW -->|HIGH| SL
+        SW -->|MEDIUM| LG --> DB
+        SW -->|LOW| DB
+    end
+
+    CI -->|blocks merge on\nmetric failure| L2
+    L3 -->|calls| FA
+```
+
 ## Tech stack
 
 | Component | Technology | Purpose |
